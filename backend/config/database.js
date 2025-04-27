@@ -30,17 +30,33 @@ const connectToDatabase = async () => {
 // For initial database and tables setup
 const setupDatabase = async () => {
   try {
-    // Create database if it doesn't exist
-    const connection = await mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD
-    });
+    console.log('Attempting to connect to MySQL server...');
+    console.log(`Host: ${process.env.DB_HOST}, User: ${process.env.DB_USER}`);
     
+    // Create database if it doesn't exist - with more detailed error handling
+    let connection;
+    try {
+      connection = await mysql.createConnection({
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD
+      });
+      console.log('Successfully connected to MySQL server');
+    } catch (err) {
+      console.error('Failed to connect to MySQL server:', err.message);
+      if (err.code === 'ECONNREFUSED') {
+        console.error('Make sure MySQL server is running and accessible at', process.env.DB_HOST);
+      }
+      throw err;
+    }
+    
+    console.log(`Creating database ${process.env.DB_NAME} if it doesn't exist...`);
     await connection.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME}`);
     await connection.query(`USE ${process.env.DB_NAME}`);
+    console.log('Database selected successfully');
     
     // Create tables
+    console.log('Creating publications table...');
     await connection.query(`
       CREATE TABLE IF NOT EXISTS publications (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -52,6 +68,7 @@ const setupDatabase = async () => {
       )
     `);
     
+    console.log('Creating projects table...');
     await connection.query(`
       CREATE TABLE IF NOT EXISTS projects (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -63,6 +80,7 @@ const setupDatabase = async () => {
       )
     `);
     
+    console.log('Creating team_members table...');
     await connection.query(`
       CREATE TABLE IF NOT EXISTS team_members (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -76,6 +94,7 @@ const setupDatabase = async () => {
       )
     `);
     
+    console.log('Creating events table...');
     await connection.query(`
       CREATE TABLE IF NOT EXISTS events (
         id INT AUTO_INCREMENT PRIMARY KEY,
