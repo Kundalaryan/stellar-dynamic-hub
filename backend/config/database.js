@@ -33,18 +33,28 @@ const setupDatabase = async () => {
     console.log('Attempting to connect to MySQL server...');
     console.log(`Host: ${process.env.DB_HOST}, User: ${process.env.DB_USER}`);
     
+    // Create connection options with more flexible authentication
+    const connectionOptions = {
+      host: process.env.DB_HOST,
+      user: process.env.DB_USER
+    };
+    
+    // Only add password if it's not empty
+    if (process.env.DB_PASSWORD) {
+      connectionOptions.password = process.env.DB_PASSWORD;
+    }
+    
     // Create database if it doesn't exist - with more detailed error handling
     let connection;
     try {
-      connection = await mysql.createConnection({
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD
-      });
+      connection = await mysql.createConnection(connectionOptions);
       console.log('Successfully connected to MySQL server');
     } catch (err) {
       console.error('Failed to connect to MySQL server:', err.message);
-      if (err.code === 'ECONNREFUSED') {
+      if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+        console.error('Access denied - please check your MySQL username and password');
+        console.error('You may need to update the .env file with the correct credentials');
+      } else if (err.code === 'ECONNREFUSED') {
         console.error('Make sure MySQL server is running and accessible at', process.env.DB_HOST);
       }
       throw err;
