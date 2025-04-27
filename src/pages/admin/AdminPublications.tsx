@@ -1,18 +1,16 @@
 
 import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-// Import the publication data
-import { publications as initialPublications } from "@/data/publications";
+import { publicationsApi } from "@/services/api";
 
 const AdminPublications = () => {
-  const [publications, setPublications] = useState(initialPublications);
+  const queryClient = useQueryClient();
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState<number | null>(null);
   
@@ -22,6 +20,55 @@ const AdminPublications = () => {
     journal: '',
     year: new Date().getFullYear(),
     doi: ''
+  });
+
+  // Fetch publications
+  const { 
+    data: publications = [], 
+    isLoading, 
+    error 
+  } = useQuery({
+    queryKey: ['publications'],
+    queryFn: publicationsApi.getAll,
+  });
+
+  // Create mutation
+  const createMutation = useMutation({
+    mutationFn: publicationsApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['publications'] });
+      toast.success('Publication added successfully');
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(`Error adding publication: ${error.message}`);
+    }
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => 
+      publicationsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['publications'] });
+      toast.success('Publication updated successfully');
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(`Error updating publication: ${error.message}`);
+    }
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: publicationsApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['publications'] });
+      toast.success('Publication deleted successfully');
+    },
+    onError: (error: any) => {
+      toast.error(`Error deleting publication: ${error.message}`);
+    }
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -43,16 +90,7 @@ const AdminPublications = () => {
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Create new publication with a new ID
-    const newPublication = {
-      id: Math.max(...publications.map(p => p.id), 0) + 1,
-      ...formData
-    };
-    
-    setPublications(prev => [...prev, newPublication]);
-    toast.success('Publication added successfully');
-    resetForm();
+    createMutation.mutate(formData);
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -60,12 +98,10 @@ const AdminPublications = () => {
     
     if (isEditing === null) return;
     
-    setPublications(prev => 
-      prev.map(pub => pub.id === isEditing ? { ...pub, ...formData } : pub)
-    );
-    
-    toast.success('Publication updated successfully');
-    resetForm();
+    updateMutation.mutate({
+      id: isEditing,
+      data: formData
+    });
   };
 
   const handleEdit = (id: number) => {
@@ -85,10 +121,22 @@ const AdminPublications = () => {
 
   const handleDelete = (id: number) => {
     if (window.confirm('Are you sure you want to delete this publication?')) {
-      setPublications(prev => prev.filter(pub => pub.id !== id));
-      toast.success('Publication deleted successfully');
+      deleteMutation.mutate(id);
     }
   };
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Error</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-red-500">Failed to load publications. Please try again later.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div>
@@ -178,8 +226,15 @@ const AdminPublications = () => {
               </div>
               
               <div className="flex gap-2 pt-4">
-                <Button type="submit">
-                  {isAdding ? 'Add Publication' : 'Update Publication'}
+                <Button 
+                  type="submit" 
+                  disabled={isAdding ? createMutation.isPending : updateMutation.isPending}
+                >
+                  {(isAdding ? createMutation.isPending : updateMutation.isPending) ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please wait...</>
+                  ) : (
+                    isAdding ? 'Add Publication' : 'Update Publication'
+                  )}
                 </Button>
                 <Button type="button" variant="outline" onClick={resetForm}>
                   Cancel
@@ -198,37 +253,61 @@ const AdminPublications = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Authors</TableHead>
-                <TableHead>Journal</TableHead>
-                <TableHead>Year</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {publications.map((pub) => (
-                <TableRow key={pub.id}>
-                  <TableCell className="font-medium">{pub.title}</TableCell>
-                  <TableCell>{pub.authors}</TableCell>
-                  <TableCell>{pub.journal}</TableCell>
-                  <TableCell>{pub.year}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(pub.id)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(pub.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-navy-600" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Authors</TableHead>
+                  <TableHead>Journal</TableHead>
+                  <TableHead>Year</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {publications.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      No publications found. Add your first one!
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  publications.map((pub) => (
+                    <TableRow key={pub.id}>
+                      <TableCell className="font-medium">{pub.title}</TableCell>
+                      <TableCell>{pub.authors}</TableCell>
+                      <TableCell>{pub.journal}</TableCell>
+                      <TableCell>{pub.year}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleEdit(pub.id)}
+                            disabled={updateMutation.isPending}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleDelete(pub.id)}
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

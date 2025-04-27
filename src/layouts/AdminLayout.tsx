@@ -4,11 +4,13 @@ import { Outlet, Navigate, useNavigate } from "react-router-dom";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { Button } from "@/components/ui/button";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut, Menu, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { api } from "@/services/api";
+import { useQueryClient } from "@tanstack/react-query";
 
-// Interface for future API status tracking
+// Interface for API status tracking
 interface ApiStatus {
   loading: boolean;
   error: string | null;
@@ -20,13 +22,41 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const queryClient = useQueryClient();
   
-  // For future API integration
+  // For API status tracking
   const [apiStatus, setApiStatus] = useState<ApiStatus>({
     loading: false,
     error: null,
     lastUpdated: null
   });
+
+  // Check API connection
+  const checkApiConnection = async () => {
+    setApiStatus(prev => ({ ...prev, loading: true }));
+    try {
+      await api.get('/');
+      setApiStatus({
+        loading: false,
+        error: null,
+        lastUpdated: new Date()
+      });
+    } catch (error) {
+      setApiStatus({
+        loading: false,
+        error: 'API connection failed',
+        lastUpdated: new Date()
+      });
+    }
+  };
+
+  // Check connection on mount
+  useEffect(() => {
+    checkApiConnection();
+    // Set up periodic check (every 5 minutes)
+    const interval = setInterval(checkApiConnection, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
@@ -44,6 +74,17 @@ const AdminLayout = () => {
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
+  };
+
+  const handleRefreshData = () => {
+    setApiStatus(prev => ({ ...prev, loading: true }));
+    // Invalidate all queries to refresh data
+    queryClient.invalidateQueries();
+    checkApiConnection();
+    toast({
+      title: "Data refresh initiated",
+      description: "Refreshing all data from the server",
+    });
   };
 
   return (
@@ -72,6 +113,21 @@ const AdminLayout = () => {
               Connection error
             </div>
           )}
+          {apiStatus.lastUpdated && !apiStatus.error && !apiStatus.loading && (
+            <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+              Connected
+            </div>
+          )}
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="flex items-center"
+            onClick={handleRefreshData}
+            disabled={apiStatus.loading}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${apiStatus.loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
           <Button 
             variant="outline" 
             size="sm" 
