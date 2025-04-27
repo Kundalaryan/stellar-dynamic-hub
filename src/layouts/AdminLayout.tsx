@@ -8,11 +8,25 @@ import { LogOut, Menu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 
+// Interface for future API status tracking
+interface ApiStatus {
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+}
+
 const AdminLayout = () => {
   const { isAuthenticated, logout } = useAdminAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // For future API integration
+  const [apiStatus, setApiStatus] = useState<ApiStatus>({
+    loading: false,
+    error: null,
+    lastUpdated: null
+  });
 
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
@@ -47,15 +61,27 @@ const AdminLayout = () => {
           </Button>
           <h1 className="text-xl font-bold text-navy-800">Admin Dashboard</h1>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="flex items-center"
-          onClick={handleLogout}
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          Logout
-        </Button>
+        <div className="flex items-center gap-4">
+          {apiStatus.loading && (
+            <div className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full">
+              Syncing...
+            </div>
+          )}
+          {apiStatus.error && (
+            <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+              Connection error
+            </div>
+          )}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex items-center"
+            onClick={handleLogout}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
+        </div>
       </header>
 
       {/* Main content */}
